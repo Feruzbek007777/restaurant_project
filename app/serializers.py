@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Driver, Delivery, Customer, Order, Dish, Menu, Payment
+from .models import Driver, Delivery, Customer, Order, Dish, Menu, Payment, Like, Comment
 
 
 class DriverSerializer(serializers.ModelSerializer):
@@ -23,13 +23,31 @@ class MenuSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class CommentSerializer(serializers.ModelSerializer):
+    customer = serializers.PrimaryKeyRelatedField(read_only=True)
+    dish = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = Comment
+        fields = ['id', 'customer', 'dish', 'text']
+
+
 class DishSerializer(serializers.ModelSerializer):
     menu = MenuSerializer()
+    likes = serializers.SerializerMethodField()
+    dislikes = serializers.SerializerMethodField()
+    comments = CommentSerializer(many=True, read_only=True)
 
     class Meta:
         model = Dish
-        fields = '__all__'
-        depth = 1
+        fields = ['id', 'name', 'menu', 'likes', 'dislikes', 'comments']
+
+    def get_likes(self, instance):
+        return instance.likes.filter(like=True).count()
+
+    def get_dislikes(self, instance):
+        return instance.likes.filter(like=False).count()
+
 
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
@@ -53,4 +71,9 @@ class OrderSerializer(serializers.ModelSerializer):
         model = Order
         fields = '__all__'
 
-#nested serializerni qolladim xulas u depthga oxshab ketarkan yani u barcha malumotni bittada ob kelarkan 
+
+class LikeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Like
+        fields = ['id', 'like', 'dish', 'customer']
+        read_only_fields = ['customer']
