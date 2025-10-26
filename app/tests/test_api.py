@@ -1,45 +1,77 @@
+import json
+from django.urls import reverse
+from django.contrib.auth.models import User
 from rest_framework.test import APITestCase
 from rest_framework import status
-from django.urls import reverse
-from app.models import Driver, Delivery, Menu
-from app.serializers import DeliverySerializer, MenuSerializer
+
+from app.models import Dish, Menu
+from app.serializers import DishSerializer
 
 
-class DeliveryApiTestCase(APITestCase):
-    def test_get_all(self):
-        driver = Driver.objects.create(name='Ali', phone='12345')
-        d1 = Delivery.objects.create(driver=driver)
-        d2 = Delivery.objects.create(driver=driver)
-        url = reverse('delivery-list')
+class DishAPITestCase(APITestCase):
+    def setUp(self):
+        user = User.objects.create_user(username='ali', password='123456')
+
+        self.token_url = reverse('login')
+        response = self.client.post(self.token_url, data={'username': 'ali', 'password': '123456'})
+        token = response.data['token'] if 'token' in response.data else response.data.get('auth_token')
+        self.client.credentials(HTTP_AUTHORIZATION='Token ' + token)
+
+        self.menu = Menu.objects.create(title='Main', description='Basic menu')
+        self.dish1 = Dish.objects.create(name='Osh', menu=self.menu)
+        self.dish2 = Dish.objects.create(name='Lagman', menu=self.menu)
+        self.dish3 = Dish.objects.create(name='Manti', menu=self.menu)
+
+    def test_get(self):
+        url = reverse('dish-list')
+        serializer = DishSerializer([self.dish1, self.dish2, self.dish3], many=True)
         response = self.client.get(url)
-        serializer = DeliverySerializer([d1, d2], many=True)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, serializer.data)
 
-    def test_filter(self):
-        driver = Driver.objects.create(name='Ali', phone='12345')
-        d1 = Delivery.objects.create(driver=driver)
-        Delivery.objects.create(driver=driver)
-        url = reverse('delivery-list') + f'?id={d1.id}'
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(any(str(d1.id) in str(response.data)))
-
-
-class MenuApiTestCase(APITestCase):
-    def test_get_all(self):
-        m1 = Menu.objects.create(title='Breakfast', description='Morning')
-        m2 = Menu.objects.create(title='Dinner', description='Evening')
-        url = reverse('menu-list')
-        response = self.client.get(url)
-        serializer = MenuSerializer([m1, m2], many=True)
+    def test_get_filter(self):
+        url = reverse('dish-list')
+        serializer = DishSerializer([self.dish1], many=True)
+        response = self.client.get(url, data={'name': 'Osh'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, serializer.data)
 
-    def test_filter(self):
-        m1 = Menu.objects.create(title='Breakfast', description='Morning')
-        Menu.objects.create(title='Dinner', description='Evening')
-        url = reverse('menu-list') + '?title=Breakfast'
-        response = self.client.get(url)
+    def test_get_search(self):
+        url = reverse('dish-list')
+        serializer = DishSerializer([self.dish1, self.dish3], many=True)
+        response = self.client.get(url, data={'search': 'sh'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(any('Breakfast' in str(response.data)))
+        self.assertEqual(response.data, serializer.data)
+
+    def test_create(self):
+        url = reverse('dish-list')
+        data = {'name': 'Somsa', 'menu': self.menu.id}
+        json_data = json.dumps(data)
+        response = self.client.post(url, data=json_data, content_type='application/json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Dish.objects.count(), 4)
+        self.assertEqual(response.data.get('name'), 'Somsa')
+
+    def test_update(self):
+        url = reverse('dish-detail', args=(self.dish2.id,))
+        data = {'name': 'Lagman Maxsusss', 'menu': self.menu.id}
+        json_data = json.dumps(data)
+        response = self.client.put(url, data=json_data, content_type='application/json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.dish2.refresh_from_db()
+        self.assertEqual(self.dish2.name, 'Lagman Maxsusss')
+
+    def test_update_partial(self):
+        url = reverse('dish-detail', args=(self.dish1.id,))
+        data = {'name': 'Palov'}
+        json_data = json.dumps(data)
+        response = self.client.patch(url, data=json_data, content_type='application/json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.dish1.refresh_from_db()
+        self.assertEqual(response.data['name'], self.dish1.name)
+
+    def test_delete(self):
+        url = reverse('dish-detail', args=(self.dish3.id,))
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(Dish.objects.count(), 2)

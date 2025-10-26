@@ -9,7 +9,7 @@ class DriverSerializer(serializers.ModelSerializer):
 
 
 class DeliverySerializer(serializers.ModelSerializer):
-    driver = DriverSerializer()
+    driver = DriverSerializer(read_only=True)
 
     class Meta:
         model = Delivery
@@ -33,14 +33,18 @@ class CommentSerializer(serializers.ModelSerializer):
 
 
 class DishSerializer(serializers.ModelSerializer):
-    menu = MenuSerializer()
+    menu_id = serializers.PrimaryKeyRelatedField(
+        queryset=Menu.objects.all(), source='menu', write_only=True
+    )
+
+    menu = MenuSerializer(read_only=True)
     likes = serializers.SerializerMethodField()
     dislikes = serializers.SerializerMethodField()
     comments = CommentSerializer(many=True, read_only=True)
 
     class Meta:
         model = Dish
-        fields = ['id', 'name', 'menu', 'likes', 'dislikes', 'comments']
+        fields = ['id', 'name', 'menu', 'menu_id', 'likes', 'dislikes', 'comments']
 
     def get_likes(self, instance):
         return instance.likes.filter(like=True).count()
